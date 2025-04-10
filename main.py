@@ -1,28 +1,26 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
+import os
 
 
+# заменить на свой URL
 BASE_URL = "https://w-stom.ru"
 CATEGORY_URL = "https://w-stom.ru/catalog/salfetki_triloks/"
 
-import os
-import requests
 
-IMAGE_DIR = r"C:\mylife\Git_project\parser_w-stom.ru\product_images"
+IMAGE_DIR = "product_images"
 os.makedirs(IMAGE_DIR, exist_ok=True)
-
-import re
 
 def download_image(url, article, index):
     """Скачивает изображение и сохраняет с уникальным именем."""
     try:
-        # Убираем недопустимые символы из имени файла
         article = re.sub(r'[\\/:"*?<>|]', '_', article)
         
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-            ext = url.split(".")[-1].split("?")[0]  # Убираем параметры после "?"
+            ext = url.split(".")[-1].split("?")[0]  
             filename = f"{article}_{index}.{ext}"
             filepath = os.path.join(IMAGE_DIR, filename)
 
@@ -30,12 +28,12 @@ def download_image(url, article, index):
                 for chunk in response.iter_content(1024):
                     file.write(chunk)
 
-            print(f"✅ Сохранено: {filepath}")  # Проверка
-            return filepath  # Возвращаем путь
+            print(f"Сохранено: {filepath}")  
+            return filepath  
         else:
-            print(f"❌ Ошибка загрузки {url} (код {response.status_code})")
+            print(f"Ошибка загрузки {url} (код {response.status_code})")
     except Exception as e:
-        print(f"⚠ Ошибка скачивания {url}: {e}")
+        print(f"Ошибка скачивания {url}: {e}")
 
     return ""
 
@@ -73,7 +71,6 @@ def get_product_links():
 def parse_product(url):
     soup = get_soup(url)
 
-    # Инициализация переменных
     breadcrumbs = [li.text.strip() for li in soup.select("li[itemprop='itemListElement'] span[itemprop='name']")][1:]
     category = breadcrumbs[0] if len(breadcrumbs) > 0 else ""
     subcategories = breadcrumbs[1:] if len(breadcrumbs) > 1 else []
@@ -81,14 +78,13 @@ def parse_product(url):
     article = ""
     manufacturer = ""
 
-    # Извлечение свойств из propertyList
     property_tables = soup.select("div.propertyList div.propertyTable")
     for prop in property_tables:
         property_name = prop.select_one("div.propertyName").text.strip()
         property_value = prop.select_one("div.propertyValue").text.strip()
 
         if property_name == "Артикул":
-            article = property_value  # Артикул
+            article = property_value  
         elif property_name == "Производитель":
             manufacturer_link = prop.select_one("div.propertyValue a")
             manufacturer = manufacturer_link.text.strip() if manufacturer_link else property_value  # Производитель
@@ -99,25 +95,21 @@ def parse_product(url):
     short_description = soup.select_one(".changeShortDescription")
     short_description = short_description.text.strip() if short_description else ""
 
-    # Полное описание
     full_description = get_full_description(soup)
 
-    # Работа с изображениями
     photo_tags = soup.select(".item a.zoom")
     photo_paths = []
 
     for i, tag in enumerate(photo_tags[:7]):
         img_url = BASE_URL + tag["href"]
-        print(f"🔗 Загружаем: {img_url}")
-        img_path = download_image(img_url, article, i + 1)  # Скачиваем изображение
-        photo_paths.append(img_path)  # Добавляем только путь к файлу
+        print(f"Загружаем: {img_url}")
+        img_path = download_image(img_url, article, i + 1)
+        photo_paths.append(img_path) 
 
-    # Если есть только одно изображение, остальные колонки остаются пустыми
     max_photos = 7
     while len(photo_paths) < max_photos:
-        photo_paths.append("")  # Заполняем пустые пути
+        photo_paths.append("") 
 
-    # Извлечение цены и единицы измерения
     price = soup.select_one(".priceVal")
     price = price.text.strip() if price else ""
 
@@ -126,7 +118,6 @@ def parse_product(url):
 
     print(f"Артикул: {article}, Производитель: {manufacturer}, Изображения: {photo_paths}")
 
-    # Возвращаем данные в строгом порядке
     return [
         url, category, *subcategories[:2], article, name,
         short_description, full_description, price, unit,
@@ -136,30 +127,20 @@ def parse_product(url):
 
 
 
-
-
-
-
-
-
 def get_full_description(soup):
-    # Получаем все элементы с классом changeDescription
     description_blocks = soup.find_all("div", class_="changeDescription")
 
     for block in description_blocks:
-        # Проверяем, есть ли атрибут data-first-value (значит, это нужный блок)
         if block.has_attr("data-first-value"):
             full_description_html = block.decode_contents()
 
-            # Заменяем <br> на переносы строк, &nbsp; на пробел
             full_description_html = full_description_html.replace("<br>", "\n").replace("&nbsp;", " ")
 
-            # Преобразуем в читаемый текст, но сохраняя форматирование
             full_description = BeautifulSoup(full_description_html, "html.parser").get_text("\n", strip=True)
             
-            return full_description  # Выходим, как только нашли нужный блок
+            return full_description  
 
-    return ""  # Если не нашли, возвращаем пустую строку
+    return ""  
 
 
 
